@@ -1,0 +1,43 @@
+# 黑名单规则配置
+blacklist:
+  # 极限用语
+  extreme_words:
+    - pattern: "(最|第一|顶级|极致|终极)"
+      type: "extreme_language"
+      severity: "high"
+    - pattern: "国家级(?!证书|认证)"
+      type: "extreme_language"
+      severity: "high"
+    - pattern: "(最佳|最好|最优|最强)"
+      type: "extreme_language"
+      severity: "high"
+
+  # 医疗违规
+  medical:
+    - pattern: "(包治|根治|治愈)[百千万]病"
+      type: "medical_fraud"
+      severity: "critical"
+    - pattern: "药品.*无副作用"
+      type: "medical_fraud"
+      severity: "high"
+    - pattern: "(祖传秘方|神医|包治)"
+      type: "medical_fraud"
+      severity: "critical"
+
+  # 联系方式
+  contact:
+    - pattern: "\\b1[3-9]\\d{9}\\b"
+      type: "phone_number"
+      severity: "medium"
+    - pattern: "微信[号|id][:：\\s]*[a-zA-Z0-9_-]+"
+      type: "wechat_id"
+      severity: "medium"
+    - pattern: "QQ[:：\\s]*\\d{5,12}"
+      type: "qq_number"
+      severity: "medium"
+
+# 白名单（豁免词）
+whitelist:
+  - "国家级证书"
+  - "国家级认证"
+  - "国家级标准"
