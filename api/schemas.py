@@ -16,6 +16,7 @@ class ReviewRequest(BaseModel):
     """审核请求"""
     content_type: ContentType = Field(..., description="内容类型")
     content: str = Field(..., description="文本内容或URL")
+    image_url: Optional[str] = Field(default=None, description="图片URL")
     metadata: Optional[Dict] = Field(default={}, description="元数据")
 
 
@@ -34,6 +35,8 @@ class ReviewResult(BaseModel):
     evidence: str = Field(default="", description="违规证据")
     confidence: float = Field(..., description="置信度")
     reasoning: str = Field(default="", description="判断理由")
+    suggestions: List[str] = Field(default=[], description="修改建议")
+    details: Optional[Dict] = Field(default=None, description="详细信息")
     regulations: Optional[List[Dict]] = Field(default=None, description="相关法规")
     need_human_review: bool = Field(default=False, description="是否需要人工复审")
 
@@ -44,6 +47,7 @@ class ReviewResponse(BaseModel):
     status: ReviewStatus = Field(..., description="任务状态")
     result: Optional[ReviewResult] = Field(default=None, description="审核结果")
     costs: Optional[Dict] = Field(default=None, description="成本信息")
+    error: Optional[str] = Field(default=None, description="错误信息")
     created_at: datetime = Field(default_factory=datetime.now, description="创建时间")
     completed_at: Optional[datetime] = Field(default=None, description="完成时间")
     estimated_time: Optional[int] = Field(default=None, description="预计完成时间（秒）")
@@ -64,6 +68,7 @@ class StatsResponse(BaseModel):
     accuracy: float = Field(..., description="准确率")
     avg_cost: float = Field(..., description="平均成本")
     avg_response_time: float = Field(..., description="平均响应时间")
+    violation_rate: float = Field(..., description="违规率")
 
 
 class StandardResponse(BaseModel):

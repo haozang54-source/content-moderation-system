@@ -23,13 +23,15 @@ tasks_storage: Dict[str, ReviewResponse] = {}
 @router.post("/review", response_model=ReviewResponse, summary="提交审核任务")
 async def submit_review(
     request: ReviewRequest,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    sync: bool = False
 ) -> ReviewResponse:
     """提交内容审核任务
     
     Args:
         request: 审核请求
         background_tasks: 后台任务
+        sync: 是否同步执行（用于测试）
         
     Returns:
         ReviewResponse: 审核响应
@@ -37,18 +39,55 @@ async def submit_review(
     # 生成任务ID
     task_id = str(uuid.uuid4())
     
-    # 创建任务响应
-    response = ReviewResponse(
-        task_id=task_id,
-        status=ReviewStatus.PENDING,
-        estimated_time=5
-    )
+    if sync:
+        # 同步执行审核（用于测试）
+        from core.pipeline import ModerationPipeline, ContentData
+        from config.settings import Settings
+        
+        settings = Settings()
+        pipeline = ModerationPipeline(settings)
+        
+        content_data = ContentData(
+            content_type=request.content_type,
+            content=request.content,
+            text=request.content if request.content_type == "text" else None
+        )
+        
+        try:
+            import asyncio
+            result = await pipeline.execute(content_data)
+            
+            # 创建完成的响应
+            response = ReviewResponse(
+                task_id=task_id,
+                status=ReviewStatus.COMPLETED,
+                result=ReviewResult(
+                    is_compliant=result.is_compliant,
+                    confidence=result.confidence,
+                    violation_types=result.violation_types,
+                    suggestions=result.suggestions,
+                    details=result.details
+                ),
+                completed_at=datetime.now()
+            )
+        except Exception as e:
+            response = ReviewResponse(
+                task_id=task_id,
+                status=ReviewStatus.FAILED,
+                error=str(e)
+            )
+    else:
+        # 异步执行（正常模式）
+        response = ReviewResponse(
+            task_id=task_id,
+            status=ReviewStatus.PENDING,
+            estimated_time=5
+        )
+        # 添加后台任务（实际应使用Celery）
+        # background_tasks.add_task(process_review, task_id, request)
     
     # 存储任务
     tasks_storage[task_id] = response
-    
-    # 添加后台任务（实际应使用Celery）
-    # background_tasks.add_task(process_review, task_id, request)
     
     return response
 
@@ -69,33 +108,66 @@ async def get_review_result(task_id: str) -> ReviewResponse:
     return tasks_storage[task_id]
 
 
-@router.post("/review/batch", response_model=StandardResponse, summary="批量审核")
-async def batch_review(request: BatchReviewRequest) -> StandardResponse:
+@router.post("/review/batch", summary="批量审核")
+async def batch_review(request: BatchReviewRequest, sync: bool = False):
     """批量审核
     
     Args:
         request: 批量审核请求
+        sync: 是否同步执行
         
     Returns:
-        StandardResponse: 标准响应
+        批量审核结果
     """
-    task_ids = []
-    
-    for item in request.items:
-        task_id = str(uuid.uuid4())
-        response = ReviewResponse(
-            task_id=task_id,
-            status=ReviewStatus.PENDING,
-            estimated_time=5
+    if sync:
+        # 同步执行（用于测试）
+        from core.pipeline import ModerationPipeline, ContentData
+        from config.settings import Settings
+        
+        settings = Settings()
+        pipeline = ModerationPipeline(settings)
+        
+        results = []
+        for item in request.items:
+            content_data = ContentData(
+                content_type=item.content_type,
+                content=item.content,
+                text=item.content if item.content_type == "text" else None
+            )
+            
+            try:
+                result = await pipeline.execute(content_data)
+                results.append({
+                    "is_compliant": result.is_compliant,
+                    "confidence": result.confidence,
+                    "violation_types": result.violation_types,
+                    "suggestions": result.suggestions
+                })
+            except Exception as e:
+                results.append({
+                    "error": str(e)
+                })
+        
+        return {"results": results}
+    else:
+        # 异步执行（正常模式）
+        task_ids = []
+        
+        for item in request.items:
+            task_id = str(uuid.uuid4())
+            response = ReviewResponse(
+                task_id=task_id,
+                status=ReviewStatus.PENDING,
+                estimated_time=5
+            )
+            tasks_storage[task_id] = response
+            task_ids.append(task_id)
+        
+        return StandardResponse(
+            code=200,
+            message="批量任务已提交",
+            data={"task_ids": task_ids, "callback_url": request.callback_url}
         )
-        tasks_storage[task_id] = response
-        task_ids.append(task_id)
-    
-    return StandardResponse(
-        code=200,
-        message="批量任务已提交",
-        data={"task_ids": task_ids, "callback_url": request.callback_url}
-    )
 
 
 @router.get("/stats", response_model=StatsResponse, summary="获取统计信息")
@@ -113,14 +185,17 @@ async def get_stats(
         StatsResponse: 统计响应
     """
     # 临时返回模拟数据
+    total = 100000
+    rejected = 12000
     return StatsResponse(
-        total_reviews=100000,
+        total_reviews=total,
         passed=85000,
-        rejected=12000,
+        rejected=rejected,
         human_review=3000,
         accuracy=0.92,
         avg_cost=0.045,
-        avg_response_time=4.2
+        avg_response_time=4.2,
+        violation_rate=rejected / total if total > 0 else 0
     )
 
 

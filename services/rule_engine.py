@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List, Dict, Optional
 from dataclasses import dataclass
 from datetime import datetime
-import pyahocorasick
+import ahocorasick
 
 
 @dataclass
@@ -58,20 +58,24 @@ class RuleEngine:
 
     def _build_automaton(self) -> None:
         """构建AC自动机用于快速多模式匹配"""
-        self.automaton = pyahocorasick.Automaton()
+        self.automaton = ahocorasick.Automaton()
         
         # 添加所有需要精确匹配的关键词
+        has_words = False
         for category, rules in self.blacklist_rules.items():
             for rule in rules:
                 pattern = rule.get("pattern", "")
                 # 如果不是正则表达式（不包含特殊字符），添加到AC自动机
-                if not any(char in pattern for char in r"()[]{}.*+?|^\$\\"):
+                if not any(char in pattern for char in r"()[]{}.*+?|^\\$\\\\"):
                     self.automaton.add_word(
                         pattern,
                         (category, rule.get("type"), rule.get("severity"))
                     )
+                    has_words = True
         
-        self.automaton.make_automaton()
+        # 只有添加了词后才调用 make_automaton
+        if has_words:
+            self.automaton.make_automaton()
 
     def _compile_regex_patterns(self) -> None:
         """编译正则表达式模式"""
@@ -123,12 +127,17 @@ class RuleEngine:
         
         severity_order = {"none": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 
-        # 使用AC自动机进行快速匹配
-        for end_index, (category, vtype, severity) in self.automaton.iter(text):
-            violation_types.append(vtype)
-            matched_positions.append((end_index - len(text) + 1, end_index))
-            if severity_order.get(severity, 0) > severity_order.get(max_severity, 0):
-                max_severity = severity
+        # 使用AC自动机进行快速匹配（只有在自动机已构建时）
+        if self.automaton:
+            try:
+                for end_index, (category, vtype, severity) in self.automaton.iter(text):
+                    violation_types.append(vtype)
+                    matched_positions.append((end_index - len(text) + 1, end_index))
+                    if severity_order.get(severity, 0) > severity_order.get(max_severity, 0):
+                        max_severity = severity
+            except AttributeError:
+                # 如果自动机未构建，跳过
+                pass
 
         # 使用正则表达式匹配
         for category, patterns in self.regex_patterns.items():

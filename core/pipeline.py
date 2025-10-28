@@ -6,6 +6,7 @@ from datetime import datetime
 from services.rule_engine import RuleEngine
 from services.ocr_service import OCRService
 from services.llm_service import LLMService
+from services.rag_service import RAGService
 from config.settings import settings
 
 
@@ -38,7 +39,8 @@ class ModerationPipeline:
         self,
         rule_engine: Optional[RuleEngine] = None,
         ocr_service: Optional[OCRService] = None,
-        llm_service: Optional[LLMService] = None
+        llm_service: Optional[LLMService] = None,
+        rag_service: Optional[RAGService] = None
     ):
         """初始化Pipeline
         
@@ -46,13 +48,18 @@ class ModerationPipeline:
             rule_engine: 规则引擎
             ocr_service: OCR服务
             llm_service: LLM服务
+            rag_service: RAG服务
         """
         self.rule_engine = rule_engine or RuleEngine()
         self.ocr_service = ocr_service or OCRService()
         self.llm_service = llm_service or LLMService(
             deepseek_api_key=settings.deepseek_api_key,
-            openai_api_key=settings.openai_api_key
+            openai_api_key=settings.openai_api_key,
+            internal_model_base_url=settings.internal_model_base_url,
+            internal_model_api_key=settings.internal_model_api_key,
+            internal_model_name=settings.internal_model_name
         )
+        self.rag_service = rag_service
         
         self.confidence_threshold_high = settings.confidence_threshold_high
         self.confidence_threshold_low = settings.confidence_threshold_low
@@ -107,8 +114,19 @@ class ModerationPipeline:
                 costs={"tokens_used": 0, "api_cost": 0.0}
             )
 
-        # Stage 3: RAG检索（暂时跳过，使用空字符串）
+        # Stage 3: RAG检索
         regulations = ""
+        if self.rag_service:
+            try:
+                rag_result = self.rag_service.retrieve(
+                    query=review_text[:500],  # 限制查询长度
+                    top_k=3,
+                    similarity_threshold=0.7
+                )
+                if rag_result.relevant_docs:
+                    regulations = "\n\n".join(rag_result.relevant_docs[:2])  # 使用前2条最相关的
+            except Exception as e:
+                print(f"RAG检索失败: {e}")
 
         # Stage 4: LLM审核（分层调用）
         review_text = content_data.text or content_data.content

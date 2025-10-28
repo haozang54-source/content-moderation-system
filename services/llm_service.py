@@ -27,17 +27,26 @@ class LLMService:
         self,
         deepseek_api_key: str = "",
         openai_api_key: Optional[str] = None,
+        internal_model_base_url: Optional[str] = None,
+        internal_model_api_key: Optional[str] = None,
+        internal_model_name: Optional[str] = None,
         prompts_path: str = "config/prompts.yaml"
     ):
         """初始化LLM服务
         
         Args:
-            deepseek_api_key: DeepSeek API密钥
-            openai_api_key: OpenAI API密钥
+            deepseek_api_key: 轻量级模型API密钥
+            openai_api_key: 强大模型API密钥
+            internal_model_base_url: 内部模型地址
+            internal_model_api_key: 内部模型密钥
+            internal_model_name: 内部模型名称
             prompts_path: Prompt模板文件路径
         """
         self.deepseek_api_key = deepseek_api_key
         self.openai_api_key = openai_api_key
+        self.internal_model_base_url = internal_model_base_url
+        self.internal_model_api_key = internal_model_api_key
+        self.internal_model_name = internal_model_name
         self.prompts_path = Path(prompts_path)
         
         # 初始化客户端
@@ -46,6 +55,14 @@ class LLMService:
             self.deepseek_client = OpenAI(
                 api_key=deepseek_api_key,
                 base_url="https://api.deepseek.com"
+            )
+        
+        # 初始化内部模型客户端
+        self.internal_client = None
+        if internal_model_base_url and internal_model_api_key:
+            self.internal_client = OpenAI(
+                api_key=internal_model_api_key,
+                base_url=internal_model_base_url
             )
         
         self.openai_client = None
@@ -79,6 +96,10 @@ class LLMService:
         Returns:
             tuple: (client, model_name, cost_per_1k_tokens)
         """
+        # 优先使用内部模型
+        if self.internal_client and self.internal_model_name:
+            return self.internal_client, self.internal_model_name, 0.0
+        
         if model_type == "strong":
             if self.openai_client:
                 return self.openai_client, "gpt-4", 0.03
@@ -129,7 +150,8 @@ class LLMService:
                         {"role": "user", "content": task_prompt}
                     ],
                     temperature=0.3,
-                    response_format={"type": "json_object"}
+                    response_format={"type": "json_object"},
+                    stream=False  # 禁用流式输出
                 )
                 
                 # 解析结果

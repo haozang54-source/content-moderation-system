@@ -7,8 +7,18 @@ class Settings(BaseSettings):
     """系统配置"""
 
     # LLM配置
-    deepseek_api_key: str = ""
-    openai_api_key: Optional[str] = None
+    deepseek_api_key: str = ""  # 轻量级模型API密钥
+    openai_api_key: Optional[str] = None  # 强大模型API密钥
+    
+    # 内部模型配置
+    internal_model_base_url: Optional[str] = None
+    internal_model_api_key: Optional[str] = None
+    internal_model_name: Optional[str] = None
+    
+    # RAG嵌入模型配置
+    embedding_model_type: str = "ollama"  # openai, ollama
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_embedding_model: str = "bge-m3"
 
     # OCR配置
     tencent_secret_id: Optional[str] = None
